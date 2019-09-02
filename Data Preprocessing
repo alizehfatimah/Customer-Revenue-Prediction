@@ -1,0 +1,186 @@
+//Hi all, welcome to my code! I hope that this proves to be helpful to some lost soul the way many github projects were for me when I had only begun my journey with python and data science. The competition itself can be found here:
+//https://www.kaggle.com/c/ga-customer-revenue-prediction
+
+//The basic code for preprocessing was picked up from the Kaggle leaderboard and can be found here:
+//https://www.kaggle.com/rahullalu/gstore-eda-lgbm-baseline-1-4260?fbclid=IwAR0ATsFSxqtvAt5D6ZbWTZcfifAbGfn0RvWlUNs61gBN4lmPgw1hFiloI6I
+
+// I made a few changes to it since I was working on an older version of the dataset. The new updated dataset required much more computational power that wasn't available for me. Here goes!
+
+#IMPORTING REQUIRED LIBRARIES
+import numpy as np # linear algebra
+import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv)
+import os
+import matplotlib.pyplot as plt
+import seaborn as sns
+import math
+
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error
+
+import gc 
+gc.enable() #enable the garbage collector to pick up what you don't need
+
+
+import warnings
+warnings.filterwarnings("ignore")
+%matplotlib inline
+
+dftrain = pd.read_csv('train.csv', dtype={'fullVisitorId':str,'date':str,'sessionId':str,'visitId':str,'visitStartTime':str})
+#FUNCTION FOR READING DICTIONARY ITEMS AND HANDLING KEYERROR
+#All functions
+
+#FUNCTION FOR PROVIDING FEATURE SUMMARY
+def feature_summary(df_fa):
+    print('DataFrame shape')
+    print('rows:',df_fa.shape[0])
+    print('cols:',df_fa.shape[1])
+    col_list=['Null','Unique_Count','Data_type','Max/Min','Mean','Std','Skewness','Sample_values']
+    df=pd.DataFrame(index=df_fa.columns,columns=col_list)
+    df['Null']=list([len(df_fa[col][df_fa[col].isnull()]) for i,col in enumerate(df_fa.columns)])
+    #df['%_Null']=list([len(df_fa[col][df_fa[col].isnull()])/df_fa.shape[0]*100 for i,col in enumerate(df_fa.columns)])
+    df['Unique_Count']=list([len(df_fa[col].unique()) for i,col in enumerate(df_fa.columns)])
+    df['Data_type']=list([df_fa[col].dtype for i,col in enumerate(df_fa.columns)])
+    for i,col in enumerate(df_fa.columns):
+        if 'float' in str(df_fa[col].dtype) or 'int' in str(df_fa[col].dtype):
+            df.at[col,'Max/Min']=str(round(df_fa[col].max(),2))+'/'+str(round(df_fa[col].min(),2))
+            df.at[col,'Mean']=df_fa[col].mean()
+            df.at[col,'Std']=df_fa[col].std()
+            df.at[col,'Skewness']=df_fa[col].skew()
+        df.at[col,'Sample_values']=list(df_fa[col].unique())
+           
+    return(df.fillna('-'))
+def get_val(x,col):
+    try:
+        y=x[col]
+    except:
+        y=np.nan
+    return(y)
+
+train_len=len(dftrain)
+
+j_fields=['device','geoNetwork','totals','trafficSource']
+
+for col in j_fields:
+    dftrain[col].replace('false','False',inplace=True,regex=True)
+    dftrain[col].replace('true','True',inplace=True,regex=True)
+    dftrain[col].replace('not available in demo dataset','NaN',inplace=True,regex=True)
+    dftrain[col].replace('(not set)','NaN',inplace=True,regex=True)
+    dftrain[col]=dftrain[col].apply(lambda x: eval(x))
+
+device_cols=list(dftrain['device'][0].keys())
+geoNetwork_cols=list(dftrain['geoNetwork'][0].keys())
+totals_cols=list(dftrain['totals'][0].keys())
+trafficSource_cols=list(dftrain['trafficSource'][0].keys())
+
+for i in range(1,len(dftrain)):
+    device_cols=list(set(device_cols) | set(list(dftrain['device'][i].keys())))
+    geoNetwork_cols=list(set(geoNetwork_cols) | set(list(dftrain['geoNetwork'][i].keys())))
+    totals_cols=list(set(totals_cols) | set(list(dftrain['totals'][i].keys())))
+    trafficSource_cols=list(set(trafficSource_cols) | set(list(dftrain['trafficSource'][i].keys())))
+    
+for jlist in device_cols:
+    col_name='device_'+jlist
+    dftrain[col_name]=dftrain['device'].apply(lambda x: get_val(x,jlist))
+
+#DROPPING device JSON FEATURE
+dftrain.drop('device',axis=1,inplace=True)
+#display(dftrain.head())   
+
+#CONVERTING geoNetwork JSON FEATURE INTO INDIVIDUAL SUB FEATURES UNDER IT
+for jlist in geoNetwork_cols:
+    col_name='geoNetwork_'+jlist
+    dftrain[col_name]=dftrain['geoNetwork'].apply(lambda x: get_val(x,jlist))
+    
+#DROPPING geoNetwork JSON FEATURE
+dftrain.drop('geoNetwork',axis=1,inplace=True)
+#display(dftrain.head())
+
+#CONVERTING trafficSource JSON FEATURE INTO INDIVIDUAL SUB FEATURES UNDER IT
+for jlist in trafficSource_cols:
+    col_name='trafficSource_'+jlist
+    dftrain[col_name]=dftrain['trafficSource'].apply(lambda x: get_val(x,jlist)) 
+
+
+#DROPPING trafficSource JSON FEATURE
+dftrain.drop('trafficSource',axis=1,inplace=True)
+#display(dftrain.head())
+
+#CONVERTING totals JSON FEATURE INTO INDIVIDUAL SUB FEATURES UNDER IT
+for jlist in totals_cols:
+    print(jlist)
+    col_name='totals_'+jlist
+    dftrain[col_name]=dftrain['totals'].apply(lambda x: get_val(x,jlist)) 
+    
+#DROPPING totals JSON FEATURE
+dftrain.drop('totals',axis=1,inplace=True)
+#display(dftrain.head())
+
+#dftrain[dftrain['totals_transactionRevenue'].notnull()] #this is working
+#CONVERTING ALL STRING 'NaN' VALUES TO np.nan
+dftrain.replace('NaN',np.nan,inplace=True)
+
+#CONVERTING VALUES IN FEATURE trafficSource_adwordsClickInfo AS THEY ARE AGAIN Json FEATURES
+#WE HAVE TO HANDLE trafficSource_adwordsClickInfo AS OTHER Json FEATURES
+dftrain['trafficSource_adwordsClickInfo']=dftrain.trafficSource_adwordsClickInfo.apply(lambda x: str(x))
+
+def UniqueCount(df): 
+    dftemp=pd.DataFrame(index=df.columns)
+    dftemp['Unique_Count']=list([len(df[col].unique()) for i,col in enumerate(df.columns)])
+    return(dftemp.fillna('-'))
+    
+#IDENFIYING ALL FEATURES WITH SAME VALUES IN ALL OBSERVATIONS
+ucdf = UniqueCount(dftrain)
+col_drop=list(ucdf.index[ucdf.Unique_Count==1])
+print('No of Columns to be removed:',len(col_drop))
+print(col_drop)
+
+#DROPPING ALL FEATURES WITH SAME VALUES IN ALL OBSERVATIONS
+dftrain.drop(col_drop,axis=1,inplace=True)
+gc.collect()
+
+dftrain.head()
+#DROPPING trafficSource_campaignCode, AS IT HAS ONLY 2 OBSERVATIONS WITH SOME VALUES
+dftrain.drop('trafficSource_campaign',axis=1,inplace=True)
+
+#GARBAGE COLLECTION
+gc.collect()
+
+%%time
+#EXTRACTING FEATURES NAMES FROM Json FEATURE trafficSource_adwordsClickInfo
+dftrain['trafficSource_adwordsClickInfo']=dftrain.trafficSource_adwordsClickInfo.apply(lambda x: eval(x))
+tsadclick_cols=list(dftrain['trafficSource_adwordsClickInfo'][0].keys())
+
+for i in range(1,len(dftrain)):
+    tsadclick_cols=list(set(tsadclick_cols) | set(list(dftrain['trafficSource_adwordsClickInfo'][i].keys())))
+
+print('FEATURES UNDER trafficSource_adwordsClickInfo Json FEATURE\n',tsadclick_cols)
+
+#EXTRACTING FEATURES FROM Json FEATURE trafficSource_adwordsClickInfo
+for jlist in tsadclick_cols:
+    col_name='tsadclick_'+jlist
+    dftrain[col_name]=dftrain['trafficSource_adwordsClickInfo'].apply(lambda x: get_val(x,jlist))
+    dftrain[col_name]=dftrain[col_name].apply(lambda x: str(x))
+    
+#DROPPING Json FEATURE trafficSource_adwordsClickInfo
+dftrain.drop('trafficSource_adwordsClickInfo',axis=1,inplace=True)
+
+%%time
+#REPLACING 'nan' and '(not provided)' WITH np.nan
+dftrain.replace("nan",np.nan,inplace=True)
+dftrain.replace("(not provided)",np.nan,inplace=True)
+dftrain.replace("(NaN)",np.nan,inplace=True)
+dftrain['totals_transactionRevenue'].replace(np.nan,0,inplace=True)
+
+#CONVERTING FEATURES TO CORRECT DATATYPE
+dftrain['totals_pageviews']=dftrain['totals_pageviews'].astype('float')
+dftrain['totals_transactionRevenue']=dftrain['totals_transactionRevenue'].astype('float')
+dftrain['totals_hits']=dftrain['totals_hits'].astype('float')
+dftrain['tsadclick_page']=dftrain['tsadclick_page'].astype('float')
+
+for col in dftrain.columns:
+    if ((dftrain[col].dtype==object) & (col!='fullVisitorId')):
+        dftrain[col]=dftrain[col].apply(lambda x: np.nan if x==np.nan else str(x).encode('utf-8', 'replace').decode('utf-8'))
+        
+ dftrain.to_csv('normalizedtraindata.csv') #create a new csv file with the cleaned dataset
+ 
+  
