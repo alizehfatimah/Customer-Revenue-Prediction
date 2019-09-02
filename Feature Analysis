@@ -1,0 +1,84 @@
+//analyze which max occurrences in the features and visualize the locations using a map
+import numpy as np 
+import matplotlib.pyplot as plt
+import pandas as pd
+df = pd.read_csv('normalizedtraindata.csv')
+df['totals_transactionRevenue'] = np.log(df['totals_transactionRevenue'])
+
+opsystem = df.groupby('device_operatingSystem').nunique()
+dev_opsystem = opsystem[opsystem.totals_transactionRevenue == max(opsystem.totals_transactionRevenue)] #find which operating system prodcues greatest revenue
+plt.bar(tuple(opsystem.device_operatingSystem.to_dict()), 'totals_transactionRevenue', data = opsystem, color = 'g')
+plt.title('Operating System with Max Revenue')
+plt.xticks(rotation=90)
+plt.rcParams['figure.figsize'] = [25, 15]
+plt.show()
+
+maxdev_ops = list(dev_opsystem.device_operatingSystem.to_dict().keys())[0]
+tempgeocon = df[df.device_operatingSystem == maxdev_ops].groupby('geoNetwork_continent').nunique() #find all users of max OS by continent
+con = tempgeocon[tempgeocon.totals_transactionRevenue == max(tempgeocon.totals_transactionRevenue)] #which continent has maximum revenue
+maxcon = list(con.geoNetwork_continent.to_dict().keys())[0]
+plt.bar(tuple(tempgeocon.geoNetwork_continent.to_dict()),'totals_transactionRevenue', data = tempgeocon, color = 'r')
+plt.xticks(rotation=90)
+plt.title('Transaction per Continent for systems with maximum revenue')
+plt.show()
+
+tempgeoCountry = df[df.device_operatingSystem == maxdev_ops][df.geoNetwork_continent == maxcon].groupby('geoNetwork_country').nunique()
+country = tempgeoCountry[tempgeoCountry.totals_transactionRevenue == max(tempgeoCountry.totals_transactionRevenue)]
+maxcountry = list(country.geoNetwork_country.to_dict().keys())[0]
+plt.bar(tuple(tempgeoCountry.geoNetwork_country.to_dict()),'totals_transactionRevenue', data = tempgeoCountry)
+plt.xticks(rotation=90)
+plt.title('Transaction per Country for systems with maximum revenue')
+plt.show()
+
+geoCity = df[df.device_operatingSystem == maxdev_ops][df.geoNetwork_continent == maxcon][df.geoNetwork_country == maxcountry][df.geoNetwork_city != 'not available in demo dataset'].groupby('geoNetwork_city').nunique()
+city = geoCity[geoCity.totals_transactionRevenue == max(geoCity.totals_transactionRevenue)]
+maxcity = list(city.geoNetwork_city.to_dict().keys())[0]
+plt.bar(tuple(geoCity.geoNetwork_city.to_dict()),'totals_transactionRevenue', data = geoCity)
+plt.title('Transaction per City for systems with maximum revenue')
+plt.xticks(rotation=90)
+plt.show()
+
+print(list(tuple(geoCity.geoNetwork_city.to_dict())))
+maxcity = list(city.geoNetwork_city.to_dict().keys())
+print(maxcity)
+
+import folium
+import pandas as pd
+def built_map(filename,max_city=[]):
+    map = folium.Map(location=[37.0902, -95.7129], zoom_start=5, tiles="Mapbox Bright")
+    fg = folium.FeatureGroup(name="My Map")
+    data = pd.read_csv(filename)
+    Lat = list(data["LAT"])
+    Lon = list(data["LON"])
+    cities = list(data["City"])
+    for lat, lon, city in zip(Lat, Lon, cities):
+        if city in max_city:
+            fg.add_child(folium.Marker(location=[lat, lon], popup="Largest Mac Users", icon=folium.Icon(color='red')))
+
+        else:
+            fg.add_child(folium.Marker(location=[lat, lon], popup="Mac Users", icon=folium.Icon(color='green')))
+            map.add_child(fg)
+    map.save("Map1.html")
+
+
+print("Function done Go ahead ")
+
+from  geopy.geocoders import Nominatim
+import time
+def lat_lon_to_file(cities):
+    df = pd.DataFrame(columns=["City", "LAT", "LON"])
+    nom = Nominatim(user_agent="my-application")
+    for city in cities:
+        n = nom.geocode(city)  # for single address like 3995 23rd st,San Francisco ,CA 94114
+        print('Longitude : ', n.longitude)
+        print('Latitude : ', n.latitude)
+        time.sleep(3)
+        df = df.append({"City":city, "LAT":n.latitude, "LON":n.longitude}, ignore_index=True)
+    df.to_csv("Cities_Corrdinates.csv")
+    return "Cities_Corrdinates.csv"
+
+location=list(tuple(geoCity.geoNetwork_city.to_dict()))
+print(location)
+
+built_map("Cities_Corrdinates.csv",maxcity)
+print("Done")
