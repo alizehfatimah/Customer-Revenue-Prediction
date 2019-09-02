@@ -1,0 +1,2 @@
+# Customer-Revenue-Prediction
+Google Analytics Customer Revenue Prediction is a competition hosted by Kaggle, and was undertaken by my partners and I as a final year project. It is a data science project which includes preprocessing of data, visualizing certain features, application of prediction models and evaluation of the results. Due to time constraints, the results were not as good as the ones on the Kaggle leader board but were significantly close. 
